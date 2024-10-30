@@ -123,3 +123,52 @@
     )
   )
 )
+
+
+;; Enhanced utility setter
+(define-public (set-level-utility (token-id uint) (level uint) (utility (string-ascii 256)))
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) (err err-owner-only))
+    ;; Check if token exists
+    (asserts! (is-some (map-get? tokens { token-id: token-id })) (err err-invalid-token))
+    ;; Validate utility string is not empty
+    (asserts! (> (len utility) u0) (err err-invalid-params))
+    (ok (map-set token-levels { token-id: token-id, level: level } { utility: utility }))
+  )
+)
+
+
+
+;; Enhanced price setters
+(define-public (set-mint-price (new-price uint))
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) (err err-owner-only))
+    (asserts! (> new-price u0) (err err-invalid-params))
+    (ok (var-set mint-price new-price))
+  )
+)
+
+(define-public (set-level-up-price (new-price uint))
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) (err err-owner-only))
+    (asserts! (> new-price u0) (err err-invalid-params))
+    (ok (var-set level-up-price new-price))
+  )
+)
+
+;; Enhanced STX withdrawal
+(define-public (withdraw-stx (amount uint))
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) (err err-owner-only))
+    (asserts! (> amount u0) (err err-zero-amount))
+
+    (let ((contract-balance (stx-get-balance (as-contract tx-sender))))
+      (asserts! (>= contract-balance amount) (err err-insufficient-funds))
+
+      (match (as-contract (stx-transfer? amount tx-sender contract-owner))
+        success (ok amount)
+        error (err err-insufficient-funds))
+    )
+  )
+)
+
