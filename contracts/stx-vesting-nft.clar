@@ -77,3 +77,49 @@
       )
   )
 )
+
+
+;; Enhanced token level update
+(define-public (update-token-level (token-id uint))
+  (let
+    (
+      (token-data (unwrap! (map-get? tokens { token-id: token-id }) (err err-invalid-token)))
+      (owner (get owner token-data))
+      (created-at (get created-at token-data))
+      (vesting-period (get vesting-period token-data))
+      (current-level (get current-level token-data))
+    )
+    ;; Validate ownership
+    (asserts! (is-eq tx-sender owner) (err err-not-token-owner))
+
+    ;; Validate vesting period
+    (asserts! (> vesting-period u0) (err err-invalid-params))
+
+    ;; Calculate new level with overflow protection
+    (let 
+      (
+        (blocks-passed (- block-height created-at))
+        (new-level (if (< blocks-passed vesting-period)
+                      u0
+                      (/ blocks-passed vesting-period)))
+      )
+      ;; Only proceed if there's an actual level increase
+      (if (> new-level current-level)
+        (let ((price (var-get level-up-price)))
+          ;; Validate price
+          (asserts! (> price u0) (err err-zero-amount))
+          (asserts! (>= (stx-get-balance tx-sender) price) (err err-insufficient-funds))
+
+          ;; Handle STX transfer
+          (match (stx-transfer? price tx-sender contract-owner)
+            success (begin
+              (map-set tokens
+                { token-id: token-id }
+                (merge token-data { current-level: new-level })
+              )
+              (ok new-level))
+            error (err err-insufficient-funds)))
+        (ok current-level))
+    )
+  )
+)
