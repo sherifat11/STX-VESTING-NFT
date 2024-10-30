@@ -172,3 +172,46 @@
   )
 )
 
+
+
+;; Enhanced read-only functions
+(define-read-only (get-last-token-id)
+  (ok (var-get token-id-nonce))
+)
+
+(define-read-only (get-token-uri (token-id uint))
+  (if (is-some (map-get? tokens { token-id: token-id }))
+    (ok none)
+    (err err-invalid-token)
+  )
+)
+
+(define-read-only (get-owner (token-id uint))
+  (match (map-get? tokens { token-id: token-id })
+    token-data (ok (some (get owner token-data)))
+    (err err-invalid-token)
+  )
+)
+
+
+;; Transfer token
+(define-public (transfer (token-id uint) (sender principal) (recipient principal))
+  (begin
+    ;; Check ownership
+    (asserts! (is-eq tx-sender sender) (err err-not-token-owner))
+
+    ;; Handle NFT transfer
+    (unwrap-panic (nft-transfer? programmable-vesting-nft token-id sender recipient))
+
+    ;; Update token ownership in our records
+    (match (map-get? tokens { token-id: token-id })
+      token-data (begin 
+                   (map-set tokens 
+                     { token-id: token-id }
+                     (merge token-data { owner: recipient })
+                   )
+                   (ok true))
+      (err err-invalid-token)
+    )
+  )
+)
